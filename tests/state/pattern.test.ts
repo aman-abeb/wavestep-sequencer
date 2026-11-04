@@ -1,0 +1,83 @@
+import { describe, expect, it } from 'vitest';
+import { STEPS_PER_PATTERN } from '../../src/audio/types';
+import {
+  DEFAULT_TEMPO_BPM,
+  MAX_TEMPO_BPM,
+  MIN_TEMPO_BPM,
+  TRACK_COUNT,
+  createSequencerState,
+  setTempo,
+  setTrackWaveform,
+  toggleStep,
+} from '../../src/state/pattern';
+
+describe('createSequencerState', () => {
+  it('creates 4 tracks of 16 resting steps at the default tempo', () => {
+    const state = createSequencerState();
+    expect(state.tracks).toHaveLength(TRACK_COUNT);
+    expect(state.tempoBpm).toBe(DEFAULT_TEMPO_BPM);
+    expect(state.tracks.map((track) => track.id)).toEqual(['bass', 'lead', 'arp', 'drums']);
+    for (const track of state.tracks) {
+      expect(track.pattern).toHaveLength(STEPS_PER_PATTERN);
+      expect(track.pattern.every((step) => step.note === null)).toBe(true);
+    }
+  });
+});
+
+describe('toggleStep', () => {
+  it('activates a rest with the track default note and deactivates an active step', () => {
+    const initial = createSequencerState();
+    const on = toggleStep(initial, 0, 0);
+    expect(on.tracks[0]!.pattern[0]!.note).toBe(33); // A1 for bass
+    expect(on.tracks[0]!.pattern[0]!.velocity).toBeGreaterThan(0);
+    const off = toggleStep(on, 0, 0);
+    expect(off.tracks[0]!.pattern[0]!.note).toBeNull();
+  });
+
+  it('uses each track’s own default note', () => {
+    const state = createSequencerState();
+    expect(toggleStep(state, 1, 3).tracks[1]!.pattern[3]!.note).toBe(69); // lead A4
+    expect(toggleStep(state, 2, 3).tracks[2]!.pattern[3]!.note).toBe(76); // arp E5
+    expect(toggleStep(state, 3, 3).tracks[3]!.pattern[3]!.note).toBe(60); // drums C4
+  });
+
+  it('does not mutate the input state', () => {
+    const initial = createSequencerState();
+    toggleStep(initial, 0, 5);
+    expect(initial.tracks[0]!.pattern[5]!.note).toBeNull();
+  });
+
+  it('ignores out-of-range indices', () => {
+    const state = createSequencerState();
+    expect(toggleStep(state, -1, 0)).toBe(state);
+    expect(toggleStep(state, 99, 0)).toBe(state);
+    expect(toggleStep(state, 0, -1)).toBe(state);
+    expect(toggleStep(state, 0, STEPS_PER_PATTERN)).toBe(state);
+  });
+});
+
+describe('setTrackWaveform', () => {
+  it('updates only the targeted track and leaves the input untouched', () => {
+    const state = createSequencerState();
+    const next = setTrackWaveform(state, 2, 'sine');
+    expect(next.tracks[2]!.waveform).toBe('sine');
+    expect(next.tracks[0]!.waveform).toBe('square');
+    expect(state.tracks[2]!.waveform).toBe('triangle');
+  });
+
+  it('returns the same state for an unknown track', () => {
+    const state = createSequencerState();
+    expect(setTrackWaveform(state, 42, 'sine')).toBe(state);
+  });
+});
+
+describe('setTempo', () => {
+  it('sets, rounds and clamps the tempo', () => {
+    const state = createSequencerState();
+    expect(setTempo(state, 140).tempoBpm).toBe(140);
+    expect(setTempo(state, 140.6).tempoBpm).toBe(141);
+    expect(setTempo(state, 10).tempoBpm).toBe(MIN_TEMPO_BPM);
+    expect(setTempo(state, 999).tempoBpm).toBe(MAX_TEMPO_BPM);
+    expect(setTempo(state, Number.NaN).tempoBpm).toBe(DEFAULT_TEMPO_BPM);
+  });
+});
