@@ -1,5 +1,5 @@
 import { midiToFrequency } from './note';
-import { createVoice } from './voice';
+import { createStepVoice } from './voice';
 import {
   STEPS_PER_PATTERN,
   type AudioContextLike,
@@ -139,7 +139,7 @@ export class LookaheadScheduler {
       if (track.muted) continue;
       const step = track.pattern[stepIndex];
       if (!step || step.note === null) continue;
-      createVoice({
+      createStepVoice({
         context: this.context,
         destination: this.context.destination,
         waveform: track.waveform,

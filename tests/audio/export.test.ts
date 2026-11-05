@@ -10,6 +10,7 @@ import {
 import { STEPS_PER_PATTERN, createEmptyPattern, createTrack, type Track } from '../../src/audio/types';
 import { MAX_VOICE_GAIN } from '../../src/audio/voice';
 import { WAV_HEADER_BYTES } from '../../src/audio/wav';
+import { PRESETS, getPreset } from '../../src/state/presets';
 import {
   createMockOfflineContextFactory,
   MockOfflineAudioContext,
@@ -111,6 +112,38 @@ describe('schedulePattern', () => {
       expect.any(Number),
     );
   });
+
+  it('schedules noise-waveform tracks as looping buffer sources instead of oscillators', () => {
+    const context = new MockOfflineAudioContext();
+    const notes = restPattern();
+    notes[0] = 60;
+    notes[4] = 60;
+    const track = makeTrack(notes, { id: 'drums', waveform: 'noise' });
+
+    const voices = schedulePattern({ context, tracks: [track], tempoBpm: 120 });
+
+    expect(voices).toBe(2);
+    expect(context.oscillators).toHaveLength(0);
+    expect(context.bufferSources).toHaveLength(2);
+    expect(context.bufferSources[0]!.start).toHaveBeenCalledWith(0);
+    expect(context.bufferSources[1]!.start).toHaveBeenCalledWith(0.5);
+    expect(context.bufferSources[0]!.loop).toBe(true);
+    const buffer = context.bufferSources[0]!.buffer;
+    expect(buffer).not.toBeNull();
+    const data = buffer!.getChannelData(0);
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+    let allEqual = true;
+    for (let i = 0; i < data.length; i += 1) {
+      const value = data[i]!;
+      if (value < min) min = value;
+      if (value > max) max = value;
+      if (value !== data[0]) allEqual = false;
+    }
+    expect(min).toBeGreaterThanOrEqual(-1);
+    expect(max).toBeLessThanOrEqual(1);
+    expect(allEqual).toBe(false); // white noise, not a constant DC signal
+  });
 });
 
 describe('renderLoopToWav', () => {
@@ -190,5 +223,57 @@ describe('renderLoopToWav', () => {
     expect(contexts[0]!.length).toBe(
       Math.ceil(loopDurationSeconds(120) * DEFAULT_EXPORT_SAMPLE_RATE),
     );
+  });
+});
+
+describe('preset WAV export', () => {
+  for (const preset of PRESETS) {
+    it(`exports the "${preset.id}" preset to a spec-valid 16-bit PCM WAV`, async () => {
+      const sampleRate = 8000;
+      const { factory, contexts } = createMockOfflineContextFactory();
+
+      const bytes = await renderLoopToWav({
+        tracks: preset.state.tracks,
+        tempoBpm: preset.state.tempoBpm,
+        sampleRate,
+        contextFactory: factory,
+      });
+
+      const sampleCount = Math.ceil(loopDurationSeconds(preset.state.tempoBpm) * sampleRate);
+      const dataSize = sampleCount * 2;
+      expect(sampleCount).toBe(contexts[0]!.length);
+      expect(bytes.length).toBe(WAV_HEADER_BYTES + dataSize);
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      expect(readAscii(bytes, 0)).toBe('RIFF');
+      expect(view.getUint32(4, true)).toBe(36 + dataSize); // RIFF chunk size = file size - 8
+      expect(readAscii(bytes, 8)).toBe('WAVE');
+      expect(readAscii(bytes, 12)).toBe('fmt ');
+      expect(view.getUint16(20, true)).toBe(1); // audio format 1 = PCM
+      expect(view.getUint16(22, true)).toBe(1); // mono
+      expect(view.getUint32(24, true)).toBe(sampleRate);
+      expect(view.getUint16(34, true)).toBe(16); // 16 bits per sample
+      expect(readAscii(bytes, 36)).toBe('data');
+      expect(view.getUint32(40, true)).toBe(dataSize); // data chunk size = sampleCount * 2
+    });
+  }
+
+  it('renders the drums preset noise hats as buffer sources alongside the sine kick oscillators', async () => {
+    const preset = getPreset('drums');
+    expect(preset).toBeDefined();
+    const { factory, contexts } = createMockOfflineContextFactory();
+
+    await renderLoopToWav({
+      tracks: preset!.state.tracks,
+      tempoBpm: preset!.state.tempoBpm,
+      sampleRate: 8000,
+      contextFactory: factory,
+    });
+
+    const context = contexts[0]!;
+    expect(context.bufferSources).toHaveLength(8); // 8 noise hats on the even steps
+    expect(context.oscillators).toHaveLength(4); // 4 sine kick hits on the beats
+    expect(context.scheduledNoiseVoices.map((voice) => voice.startTime)).toEqual([
+      0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75,
+    ]);
   });
 });

@@ -5,8 +5,12 @@ import type {
   OfflineAudioContextLike,
 } from '../../src/audio/export';
 import {
+  createMockAudioBuffer,
+  createMockBufferSource,
   createMockGain,
   createMockOscillator,
+  type MockAudioBuffer,
+  type MockBufferSource,
   type MockGain,
   type MockOscillator,
 } from './mock-audio-context';
@@ -15,6 +19,14 @@ import {
 export interface ScheduledMockVoice {
   oscillator: MockOscillator;
   gain: MockGain;
+  startTime: number;
+  stopTime: number;
+}
+
+/** One scheduled noise voice recorded by {@link MockOfflineAudioContext}. */
+export interface ScheduledMockNoiseVoice {
+  source: MockBufferSource;
+  gain: MockGain | undefined;
   startTime: number;
   stopTime: number;
 }
@@ -40,8 +52,8 @@ export interface MockOfflineAudioContextOptions {
 
 /**
  * Mock of `OfflineAudioContext` for offline tests: records every scheduled
- * voice (oscillator + gain + exact start/stop times) and resolves
- * `startRendering()` to a deterministic `Float32Array` buffer.
+ * voice (oscillator or buffer source + gain + exact start/stop times) and
+ * resolves `startRendering()` to a deterministic `Float32Array` buffer.
  */
 export class MockOfflineAudioContext implements OfflineAudioContextLike {
   currentTime = 0;
@@ -51,6 +63,8 @@ export class MockOfflineAudioContext implements OfflineAudioContextLike {
   readonly destination: AudioNode;
   readonly oscillators: MockOscillator[] = [];
   readonly gains: MockGain[] = [];
+  readonly buffers: MockAudioBuffer[] = [];
+  readonly bufferSources: MockBufferSource[] = [];
   readonly renderedSamples: Float32Array;
   startRenderingCalls = 0;
 
@@ -79,7 +93,19 @@ export class MockOfflineAudioContext implements OfflineAudioContextLike {
     return gain as unknown as GainNode;
   }
 
-  /** Every voice scheduled so far, with the exact start/stop times passed to the oscillator. */
+  createBuffer(numberOfChannels: number, length: number, sampleRate: number): AudioBuffer {
+    const buffer = createMockAudioBuffer(numberOfChannels, length, sampleRate);
+    this.buffers.push(buffer);
+    return buffer as unknown as AudioBuffer;
+  }
+
+  createBufferSource(): AudioBufferSourceNode {
+    const source = createMockBufferSource();
+    this.bufferSources.push(source);
+    return source as unknown as AudioBufferSourceNode;
+  }
+
+  /** Every oscillator voice scheduled so far, with the exact start/stop times passed to the oscillator. */
   get scheduledVoices(): ScheduledMockVoice[] {
     return this.oscillators.map((oscillator, index) => ({
       oscillator,
@@ -87,6 +113,21 @@ export class MockOfflineAudioContext implements OfflineAudioContextLike {
       startTime: Number(oscillator.start.mock.calls[0]?.[0] ?? 0),
       stopTime: Number(oscillator.stop.mock.calls[0]?.[0] ?? 0),
     }));
+  }
+
+  /** Every noise voice scheduled so far, with the exact start/stop times passed to the buffer source. */
+  get scheduledNoiseVoices(): ScheduledMockNoiseVoice[] {
+    return this.bufferSources.map((source) => {
+      const gain = source.connect.mock.calls
+        .map((call) => call[0] as MockGain)
+        .find((node) => this.gains.includes(node));
+      return {
+        source,
+        gain,
+        startTime: Number(source.start.mock.calls[0]?.[0] ?? 0),
+        stopTime: Number(source.stop.mock.calls[0]?.[0] ?? 0),
+      };
+    });
   }
 
   /** Resolves to the deterministic rendered buffer, like a real offline render. */

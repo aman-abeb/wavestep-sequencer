@@ -101,3 +101,17 @@ export function setTempo(state: SequencerState, tempoBpm: number): SequencerStat
     : DEFAULT_TEMPO_BPM;
   return { ...state, tempoBpm: bpm };
 }
+
+/**
+ * Deep-copies a sequencer state — every track and every step — so a loaded
+ * preset (or any shared state) can be edited without mutating the original.
+ */
+export function cloneSequencerState(state: SequencerState): SequencerState {
+  return {
+    tempoBpm: state.tempoBpm,
+    tracks: state.tracks.map((track) => ({
+      ...track,
+      pattern: track.pattern.map((step) => ({ ...step })),
+    })),
+  };
+}

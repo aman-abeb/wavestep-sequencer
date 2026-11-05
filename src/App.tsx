@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { renderLoopToWav } from './audio/export';
+import type { Waveform } from './audio/types';
 import { StepGrid } from './components/StepGrid';
 import {
   createSequencerState,
@@ -8,6 +9,7 @@ import {
   toggleStep,
   type SequencerState,
 } from './state/pattern';
+import { PRESETS, createStateFromPreset, getPreset } from './state/presets';
 
 /** File name of the downloaded WAV export. */
 export const EXPORT_FILE_NAME = 'wavestep-loop.wav';
@@ -15,12 +17,36 @@ export const EXPORT_FILE_NAME = 'wavestep-loop.wav';
 /**
  * Root of the WaveStep UI. Owns the single {@link SequencerState}, pipes
  * every grid edit through the pure state helpers in `src/state/pattern.ts`,
- * and renders the current loop to a downloadable WAV on demand.
+ * loads the built-in chiptune presets from `src/state/presets.ts`, and
+ * renders the current loop to a downloadable WAV on demand.
  */
 export default function App() {
   const [state, setState] = useState<SequencerState>(createSequencerState);
+  const [presetId, setPresetId] = useState('');
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  const handlePresetChange = (id: string): void => {
+    const preset = getPreset(id);
+    if (!preset) return;
+    setState(createStateFromPreset(preset));
+    setPresetId(preset.id);
+  };
+
+  const handleToggleStep = (trackIndex: number, stepIndex: number): void => {
+    setState((prev) => toggleStep(prev, trackIndex, stepIndex));
+    setPresetId('');
+  };
+
+  const handleWaveformChange = (trackIndex: number, waveform: Waveform): void => {
+    setState((prev) => setTrackWaveform(prev, trackIndex, waveform));
+    setPresetId('');
+  };
+
+  const handleTempoChange = (tempoBpm: number): void => {
+    setState((prev) => setTempo(prev, tempoBpm));
+    setPresetId('');
+  };
 
   const handleExportWav = async (): Promise<void> => {
     if (exporting) return;
@@ -54,6 +80,23 @@ export default function App() {
         <p className="tagline">4-track chiptune step sequencer — click a cell to toggle a note</p>
       </header>
       <div className="app-actions">
+        <label className="preset-label" htmlFor="preset-select">
+          Preset
+        </label>
+        <select
+          id="preset-select"
+          className="preset-select"
+          aria-label="Load a chiptune preset"
+          value={presetId}
+          onChange={(event) => handlePresetChange(event.target.value)}
+        >
+          <option value="">Custom</option>
+          {PRESETS.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.name}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           className="export-button"
@@ -71,13 +114,9 @@ export default function App() {
       </div>
       <StepGrid
         state={state}
-        onToggleStep={(trackIndex, stepIndex) =>
-          setState((prev) => toggleStep(prev, trackIndex, stepIndex))
-        }
-        onWaveformChange={(trackIndex, waveform) =>
-          setState((prev) => setTrackWaveform(prev, trackIndex, waveform))
-        }
-        onTempoChange={(tempoBpm) => setState((prev) => setTempo(prev, tempoBpm))}
+        onToggleStep={handleToggleStep}
+        onWaveformChange={handleWaveformChange}
+        onTempoChange={handleTempoChange}
       />
     </main>
   );

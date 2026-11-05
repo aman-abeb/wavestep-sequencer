@@ -68,3 +68,41 @@ describe('App — Export WAV button', () => {
     expect(alert.textContent).toContain('offline context unavailable');
   });
 });
+
+describe('App — preset picker', () => {
+  beforeEach(() => {
+    mockedRenderLoopToWav.mockReset();
+    mockedRenderLoopToWav.mockResolvedValue(new Uint8Array([1, 2, 3, 4]));
+  });
+
+  it('loads the drums preset into the grid when picked', () => {
+    render(<App />);
+    const picker = screen.getByRole('combobox', { name: /load a chiptune preset/i });
+    fireEvent.change(picker, { target: { value: 'drums' } });
+
+    // the drums preset opens with a noise hat on step 1 (index 0)
+    expect(
+      screen.getByRole('button', { name: 'Drums step 1 active' }).getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(
+      (screen.getByRole('combobox', { name: 'Waveform for Drums' }) as HTMLSelectElement).value,
+    ).toBe('noise');
+    expect(screen.getByText('120 BPM')).toBeTruthy();
+  });
+
+  it('loads the bassline preset and resets to Custom after a manual edit', () => {
+    render(<App />);
+    const picker = screen.getByRole('combobox', {
+      name: /load a chiptune preset/i,
+    }) as HTMLSelectElement;
+    fireEvent.change(picker, { target: { value: 'bassline' } });
+
+    expect(picker.value).toBe('bassline');
+    expect(screen.getByRole('button', { name: 'Bass step 1 active' })).toBeTruthy();
+    expect(screen.getByText('128 BPM')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bass step 2 rest' }));
+    expect(picker.value).toBe('');
+    expect(screen.getByRole('button', { name: 'Bass step 2 active' })).toBeTruthy();
+  });
+});

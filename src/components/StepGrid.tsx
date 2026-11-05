@@ -2,7 +2,7 @@ import { STEPS_PER_PATTERN, createEmptyStep, type Waveform } from '../audio/type
 import { MAX_TEMPO_BPM, MIN_TEMPO_BPM, type SequencerState } from '../state/pattern';
 
 /** Waveform choices offered per track, in display order. */
-const WAVEFORM_OPTIONS: readonly Waveform[] = ['square', 'triangle', 'sawtooth', 'sine'];
+const WAVEFORM_OPTIONS: readonly Waveform[] = ['square', 'triangle', 'sawtooth', 'sine', 'noise'];
 
 /** Props for {@link StepGrid}; every edit flows out through the callbacks. */
 export interface StepGridProps {

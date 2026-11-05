@@ -5,6 +5,7 @@ import {
   MAX_TEMPO_BPM,
   MIN_TEMPO_BPM,
   TRACK_COUNT,
+  cloneSequencerState,
   createSequencerState,
   setTempo,
   setTrackWaveform,
@@ -79,5 +80,24 @@ describe('setTempo', () => {
     expect(setTempo(state, 10).tempoBpm).toBe(MIN_TEMPO_BPM);
     expect(setTempo(state, 999).tempoBpm).toBe(MAX_TEMPO_BPM);
     expect(setTempo(state, Number.NaN).tempoBpm).toBe(DEFAULT_TEMPO_BPM);
+  });
+});
+
+describe('cloneSequencerState', () => {
+  it('deep-copies tracks and steps so edits do not leak into the source state', () => {
+    const toggled = toggleStep(createSequencerState(), 0, 0);
+    const clone = cloneSequencerState(toggled);
+    expect(clone).toEqual(toggled);
+    expect(clone).not.toBe(toggled);
+    expect(clone.tracks[0]).not.toBe(toggled.tracks[0]);
+    expect(clone.tracks[0]!.pattern[0]).not.toBe(toggled.tracks[0]!.pattern[0]);
+
+    clone.tracks[0]!.pattern[0] = { note: null, velocity: 0.1 };
+    clone.tracks[1]!.waveform = 'sine';
+    clone.tempoBpm = 90;
+
+    expect(toggled.tracks[0]!.pattern[0]!.note).toBe(33);
+    expect(toggled.tracks[1]!.waveform).toBe('sawtooth');
+    expect(toggled.tempoBpm).toBe(DEFAULT_TEMPO_BPM);
   });
 });

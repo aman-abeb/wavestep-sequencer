@@ -1,6 +1,6 @@
 import { midiToFrequency } from './note';
 import { STEPS_PER_PATTERN, type AudioContextLike, type Track } from './types';
-import { DEFAULT_RELEASE, createVoice } from './voice';
+import { DEFAULT_RELEASE, createStepVoice } from './voice';
 import { encodeWavPcm16 } from './wav';
 
 /** Sample rate used for WAV export unless overridden, in Hz. */
@@ -65,7 +65,8 @@ export interface SchedulePatternOptions {
 /**
  * Schedules every active step of every unmuted track on `context`, one voice
  * per note, at exact 16th-note times (`startTime + stepIndex * stepDuration`).
- * Returns the number of voices scheduled.
+ * Tracks with the `'noise'` waveform render looping noise buffer sources
+ * instead of oscillators. Returns the number of voices scheduled.
  */
 export function schedulePattern(options: SchedulePatternOptions): number {
   const { context, tracks, tempoBpm } = options;
@@ -78,7 +79,7 @@ export function schedulePattern(options: SchedulePatternOptions): number {
       if (track.muted) continue;
       const step = track.pattern[stepIndex];
       if (!step || step.note === null) continue;
-      createVoice({
+      createStepVoice({
         context,
         destination: context.destination,
         waveform: track.waveform,

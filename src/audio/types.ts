@@ -1,8 +1,11 @@
 /** Number of steps in one pattern (one bar of 16th notes). */
 export const STEPS_PER_PATTERN = 16;
 
-/** Oscillator waveforms supported by the Web Audio voices. */
-export type Waveform = 'square' | 'triangle' | 'sawtooth' | 'sine';
+/**
+ * Waveforms supported by the sequencer voices: the four `OscillatorNode`
+ * types plus `'noise'`, which plays a looping white-noise buffer source.
+ */
+export type Waveform = 'square' | 'triangle' | 'sawtooth' | 'sine' | 'noise';
 
 /** A single step in a pattern: a MIDI note (or a rest) plus a velocity. */
 export interface Step {
@@ -42,9 +45,12 @@ export interface StepEvent {
  */
 export interface AudioContextLike {
   readonly currentTime: number;
+  readonly sampleRate: number;
   readonly destination: AudioNode;
   createOscillator(): OscillatorNode;
   createGain(): GainNode;
+  createBuffer(numberOfChannels: number, length: number, sampleRate: number): AudioBuffer;
+  createBufferSource(): AudioBufferSourceNode;
 }
 
 /** Creates a resting step with a default velocity. */
