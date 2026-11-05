@@ -15,14 +15,15 @@ A browser step sequencer for chiptune loops: a 4-track × 16-step grid, Web Audi
 - **Equal-temperament note mapping** — `midiToFrequency` with A4 = 440 Hz, plus `noteNameToMidi` (`"C#4"` → 61)
 - **Oscillator voice factory** — `createVoice` wires `OscillatorNode → GainNode → destination` with an attack/hold/release envelope scaled by velocity
 - **Lookahead scheduler** — a `setInterval` every 25 ms schedules 16th-note steps 0.1 s ahead on `AudioContext.currentTime`, so timing stays sample-accurate even if the main thread stalls
+- **Offline WAV export** — `renderLoopToWav` renders the current loop through an `OfflineAudioContext` and the pure `encodeWavPcm16` encoder emits a byte-exact 16-bit PCM `.wav`; the **Export WAV** button downloads it as `wavestep-loop.wav`
 
 ## Quickstart
 
 ```bash
 npm install
 npm test        # run the vitest suite once, fully offline
-npm run build   # strict type-check (tsc --noEmit)
-npm start       # runs the build check and exits
+npm run dev     # open the playable sequencer in the browser
+npm run build   # strict type-check (tsc --noEmit) + production bundle
 ```
 
 ## Example
@@ -32,6 +33,7 @@ import {
   LookaheadScheduler,
   createEmptyPattern,
   createTrack,
+  renderLoopToWav,
 } from './src/audio/index';
 
 const bass = createTrack({ id: 'bass', name: 'Bass', waveform: 'square' });
@@ -47,6 +49,10 @@ const scheduler = new LookaheadScheduler({
   onStep: ({ stepIndex, time }) => console.log(`step ${stepIndex} @ ${time.toFixed(3)}s`),
 });
 scheduler.start(); // ... scheduler.stop() later
+
+// Offline-render the same loop to 16-bit PCM WAV bytes (browser only):
+const wavBytes = await renderLoopToWav({ tracks: [bass], tempoBpm: 120 });
+// wrap in a Blob and trigger a download — see the Export WAV button in src/App.tsx
 ```
 
 ## How it works
@@ -55,7 +61,10 @@ scheduler.start(); // ... scheduler.stop() later
 - `src/audio/note.ts` — `midiToFrequency(midi) = 440 * 2^((midi - 69) / 12)` and `noteNameToMidi("A4") = 69`.
 - `src/audio/voice.ts` — `createVoice(...)` builds one note: an oscillator (waveform + frequency) into a gain node with a `0 → peak → 0` envelope, connected to the destination and started/stopped at exact audio times. `triggerNote(...)` is the MIDI-note convenience wrapper.
 - `src/audio/scheduler.ts` — `LookaheadScheduler` keeps a `nextStepTime` on the audio clock; every 25 ms tick it schedules all steps falling within the next 0.1 s, triggering voices for non-muted tracks and emitting `onStep` events. Tempo is re-read per step, so tempo changes apply live.
+- `src/audio/wav.ts` — pure, byte-exact 16-bit PCM WAV encoder: `encodeWavPcm16` writes the canonical 44-byte RIFF/WAVE header plus little-endian int16 samples, and `floatToInt16` maps the -1..1 range to -32768..32767.
+- `src/audio/export.ts` — `schedulePattern` places every active step of every unmuted track on an offline context at exact 16th-note times; `renderLoopToWav` sizes an `OfflineAudioContext` to the full loop (plus the release tail), awaits `startRendering()`, and returns WAV bytes. The **Export WAV** button in `src/App.tsx` wraps the bytes in an `audio/wav` Blob and downloads `wavestep-loop.wav`.
 - `tests/helpers/mock-audio-context.ts` — a `MockAudioContext` with a manually advanced `currentTime` and spy `createOscillator` / `createGain` factories, so the scheduler and voices are tested with `vi.useFakeTimers()` and zero real audio.
+- `tests/helpers/mock-offline-context.ts` — a `MockOfflineAudioContext` that records every scheduled voice with its start/stop times and resolves `startRendering()` to a deterministic `Float32Array`, so the export path is tested with zero real audio.
 
 ## Running tests
 
@@ -69,12 +78,17 @@ Sample output:
  ✓ tests/audio/note.test.ts (8 tests)
  ✓ tests/audio/voice.test.ts (5 tests)
  ✓ tests/audio/scheduler.test.ts (7 tests)
+ ✓ tests/audio/wav.test.ts (7 tests)
+ ✓ tests/audio/export.test.ts (8 tests)
+ ✓ tests/state/pattern.test.ts (8 tests)
+ ✓ tests/ui/step-grid.test.tsx (8 tests)
+ ✓ tests/ui/app.test.tsx (2 tests)
 
- Test Files  3 passed (3)
-      Tests  20 passed (20)
+ Test Files  8 passed (8)
+      Tests  53 passed (53)
 ```
 
-The scheduler tests advance a mocked audio clock with fake timers and assert exact step times (at 120 BPM: steps land at 0.050 s, 0.175 s, 0.300 s, …), note frequencies (A4 → 440 Hz), and that muted tracks and rests trigger nothing.
+The scheduler tests advance a mocked audio clock with fake timers and assert exact step times (at 120 BPM: steps land at 0.050 s, 0.175 s, 0.300 s, …), note frequencies (A4 → 440 Hz), and that muted tracks and rests trigger nothing. The export tests render a known pattern through a mock `OfflineAudioContext` and assert the scheduled note count and per-step times, the WAV byte length (`44 + sampleCount * 2`), the RIFF/WAVE/fmt /data header fields, and the little-endian int16 conversion of the rendered samples.
 
 <!-- builder:roadmap:start -->
 ## Status
