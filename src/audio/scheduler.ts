@@ -25,6 +25,34 @@ export const MAX_TEMPO_BPM = 300;
 /** Tempo used when the provided tempo is not a finite number, in BPM. */
 export const FALLBACK_TEMPO_BPM = 120;
 
+/** Lowest swing fraction: straight 16th notes with no delay. */
+export const MIN_SWING = 0;
+
+/** Highest swing fraction: odd 16th steps delayed by up to 75% of a step. */
+export const MAX_SWING = 0.75;
+
+/** Default swing fraction: straight timing. */
+export const DEFAULT_SWING = 0;
+
+/**
+ * Clamps a swing fraction into [{@link MIN_SWING}, {@link MAX_SWING}];
+ * non-finite input falls back to {@link DEFAULT_SWING}.
+ */
+export function clampSwing(swing: number): number {
+  if (!Number.isFinite(swing)) return DEFAULT_SWING;
+  return Math.min(MAX_SWING, Math.max(MIN_SWING, swing));
+}
+
+/**
+ * Timing offset that swing applies to one step: odd (off-beat) 16th steps are
+ * delayed by `swing * stepDuration` seconds while even steps stay on the grid.
+ * Shared by the live scheduler and the offline WAV exporter so live playback
+ * and exported renders stay sample-consistent.
+ */
+export function swingOffsetSeconds(stepIndex: number, stepDuration: number, swing: number): number {
+  return stepIndex % 2 === 1 ? clampSwing(swing) * stepDuration : 0;
+}
+
 /** Options for constructing a {@link LookaheadScheduler}. */
 export interface LookaheadSchedulerOptions {
   /** Audio context (or mock) whose clock drives scheduling. */
@@ -33,6 +61,12 @@ export interface LookaheadSchedulerOptions {
   getTracks: () => readonly Track[];
   /** Returns the current tempo in BPM; read on every scheduled step. */
   getTempo: () => number;
+  /**
+   * Returns the current swing fraction (0..0.75, clamped with
+   * {@link clampSwing}); read on every tick. Odd 16th steps are delayed by
+   * `swing * stepDuration` on the audio clock. Defaults to 0 (straight timing).
+   */
+  getSwing?: () => number;
   /**
    * Called for every scheduled step. Note that steps are scheduled ahead of
    * time, so `event.time` is the future audio time at which the step sounds.
@@ -55,11 +89,16 @@ export interface LookaheadSchedulerOptions {
  * ahead of time, playback stays sample-accurate even if the main thread
  * stalls between ticks. Each step is a 16th note, so its duration is
  * `60 / bpm / 4` seconds, re-read from `getTempo()` on every step.
+ *
+ * Swing: odd (off-beat) steps are delayed by `swing * stepDuration` via
+ * {@link swingOffsetSeconds}, re-read from `getSwing()` on every tick, so
+ * swing changes apply live just like tempo changes.
  */
 export class LookaheadScheduler {
   private readonly context: AudioContextLike;
   private readonly getTracks: () => readonly Track[];
   private readonly getTempo: () => number;
+  private readonly getSwing: () => number;
   private readonly onStep: ((event: StepEvent) => void) | undefined;
   private readonly lookahead: number;
   private readonly tickMs: number;
@@ -72,6 +111,7 @@ export class LookaheadScheduler {
     this.context = options.context;
     this.getTracks = options.getTracks;
     this.getTempo = options.getTempo;
+    this.getSwing = options.getSwing ?? (() => DEFAULT_SWING);
     this.onStep = options.onStep;
     this.lookahead = options.lookahead ?? DEFAULT_LOOKAHEAD_SECONDS;
     this.tickMs = options.tickMs ?? DEFAULT_TICK_MS;
@@ -126,9 +166,13 @@ export class LookaheadScheduler {
 
   private tick(): void {
     const horizon = this.context.currentTime + this.lookahead;
-    while (this.nextStepTimeValue < horizon) {
-      this.scheduleStep(this.stepIndex, this.nextStepTimeValue);
-      this.nextStepTimeValue += this.stepDuration();
+    const swing = clampSwing(this.getSwing());
+    for (;;) {
+      const duration = this.stepDuration();
+      const time = this.nextStepTimeValue + swingOffsetSeconds(this.stepIndex, duration, swing);
+      if (time >= horizon) break;
+      this.scheduleStep(this.stepIndex, time);
+      this.nextStepTimeValue += duration;
       this.stepIndex = (this.stepIndex + 1) % STEPS_PER_PATTERN;
     }
   }

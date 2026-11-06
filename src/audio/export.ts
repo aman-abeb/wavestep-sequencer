@@ -1,4 +1,5 @@
 import { midiToFrequency } from './note';
+import { swingOffsetSeconds } from './scheduler';
 import { STEPS_PER_PATTERN, type AudioContextLike, type Track } from './types';
 import { DEFAULT_RELEASE, createStepVoice } from './voice';
 import { encodeWavPcm16 } from './wav';
@@ -58,23 +59,32 @@ export interface SchedulePatternOptions {
   tracks: readonly Track[];
   /** Tempo in BPM; each step is a 16th note. */
   tempoBpm: number;
+  /**
+   * Swing fraction in 0..0.75 (clamped): odd 16th steps are delayed by
+   * `swing * stepDuration`, exactly like the live lookahead scheduler, so
+   * exported renders match live playback. Defaults to 0 (straight timing).
+   */
+  swing?: number | undefined;
   /** AudioContext time at which step 0 starts; defaults to 0. */
   startTime?: number;
 }
 
 /**
  * Schedules every active step of every unmuted track on `context`, one voice
- * per note, at exact 16th-note times (`startTime + stepIndex * stepDuration`).
- * Tracks with the `'noise'` waveform render looping noise buffer sources
- * instead of oscillators. Returns the number of voices scheduled.
+ * per note, at exact 16th-note times (`startTime + stepIndex * stepDuration`,
+ * plus the swing offset for odd steps). Tracks with the `'noise'` waveform
+ * render looping noise buffer sources instead of oscillators. Returns the
+ * number of voices scheduled.
  */
 export function schedulePattern(options: SchedulePatternOptions): number {
   const { context, tracks, tempoBpm } = options;
   const startTime = options.startTime ?? 0;
+  const swing = options.swing ?? 0;
   const stepDuration = stepDurationSeconds(tempoBpm);
   let voices = 0;
   for (let stepIndex = 0; stepIndex < STEPS_PER_PATTERN; stepIndex += 1) {
-    const time = startTime + stepIndex * stepDuration;
+    const time =
+      startTime + stepIndex * stepDuration + swingOffsetSeconds(stepIndex, stepDuration, swing);
     for (const track of tracks) {
       if (track.muted) continue;
       const step = track.pattern[stepIndex];
@@ -100,6 +110,8 @@ export interface RenderLoopToWavOptions {
   tracks: readonly Track[];
   /** Tempo in BPM; the loop is exactly 16 steps long. */
   tempoBpm: number;
+  /** Swing fraction forwarded to {@link schedulePattern}; defaults to 0. */
+  swing?: number;
   /** Sample rate of the rendered WAV in Hz; defaults to {@link DEFAULT_EXPORT_SAMPLE_RATE}. */
   sampleRate?: number;
   /** AudioContext time at which step 0 starts inside the render; defaults to 0. */
@@ -112,7 +124,9 @@ export interface RenderLoopToWavOptions {
  * Renders one full loop of `tracks` through an `OfflineAudioContext` sized to
  * the whole loop (plus the release tail), then encodes the rendered channel
  * data with {@link encodeWavPcm16} and returns the 16-bit PCM WAV bytes,
- * ready to be wrapped in a `Blob` and downloaded.
+ * ready to be wrapped in a `Blob` and downloaded. The optional `swing`
+ * fraction is applied with the same shared timing helper as the live
+ * scheduler, so the exported WAV sounds identical to live playback.
  */
 export async function renderLoopToWav(options: RenderLoopToWavOptions): Promise<Uint8Array> {
   const sampleRate = options.sampleRate ?? DEFAULT_EXPORT_SAMPLE_RATE;
@@ -123,6 +137,7 @@ export async function renderLoopToWav(options: RenderLoopToWavOptions): Promise<
     context,
     tracks: options.tracks,
     tempoBpm: options.tempoBpm,
+    swing: options.swing,
     startTime: options.startTime ?? 0,
   });
   const rendered = await context.startRendering();
