@@ -1,6 +1,6 @@
 {
   "name": "wavestep-sequencer",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Browser step sequencer for chiptune loops: 16-step grid, Web Audio oscillators, per-track waveforms, and offline WAV export.",
   "type": "module",
   "private": true,
@@ -12,7 +12,8 @@
     "start": "vite",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "demo:wav": "vite-node scripts/generate-demo-wav.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -22,6 +23,7 @@
     "@eslint/js": "^9.17.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.1.0",
+    "@types/node": "^22.10.5",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
