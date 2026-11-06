@@ -14,18 +14,28 @@ export interface StepGridProps {
   onWaveformChange: (trackIndex: number, waveform: Waveform) => void;
   /** Called when the tempo slider moves, with the requested BPM. */
   onTempoChange: (tempoBpm: number) => void;
+  /** Called when a track's mute button is clicked, with the track index. */
+  onToggleMute: (trackIndex: number) => void;
 }
 
 /**
- * The 4-track x 16-step sequencer grid: one row per track with a waveform
- * select and 16 toggle buttons, plus the global tempo slider. Purely
- * presentational — all mutations happen in the parent via the callbacks.
+ * The 4-track x 16-step sequencer grid: one row per track with a mute button
+ * (keyboard shortcut `1`..`4`), a waveform select and 16 toggle buttons, plus
+ * the global tempo slider. Purely presentational — all mutations happen in
+ * the parent via the callbacks.
  *
  * Each cell is a real `<button>` with `aria-pressed` and a descriptive
- * `aria-label` (`"Bass step 1 rest"` / `"Bass step 1 active"`), so the grid
- * is fully keyboard- and screen-reader-operable.
+ * `aria-label` (`"Bass step 1 rest"` / `"Bass step 1 active"`), and each mute
+ * button exposes `aria-pressed`, `aria-label` and `aria-keyshortcuts`, so the
+ * grid is fully keyboard- and screen-reader-operable.
  */
-export function StepGrid({ state, onToggleStep, onWaveformChange, onTempoChange }: StepGridProps) {
+export function StepGrid({
+  state,
+  onToggleStep,
+  onWaveformChange,
+  onTempoChange,
+  onToggleMute,
+}: StepGridProps) {
   return (
     <section className="step-grid" aria-label="Step sequencer">
       <div className="tempo-row">
@@ -51,7 +61,19 @@ export function StepGrid({ state, onToggleStep, onWaveformChange, onTempoChange 
         {state.tracks.map((track, trackIndex) => (
           <div className="track-row" key={track.id} data-track={track.id}>
             <div className="track-header">
-              <span className="track-name">{track.name}</span>
+              <div className="track-title">
+                <span className="track-name">{track.name}</span>
+                <button
+                  type="button"
+                  className={`mute-button${track.muted ? ' muted' : ''}`}
+                  aria-pressed={track.muted}
+                  aria-label={`Mute ${track.name}`}
+                  aria-keyshortcuts={String(trackIndex + 1)}
+                  onClick={() => onToggleMute(trackIndex)}
+                >
+                  {track.muted ? 'Muted' : 'Mute'}
+                </button>
+              </div>
               <select
                 className="waveform-select"
                 aria-label={`Waveform for ${track.name}`}

@@ -10,6 +10,7 @@ import {
   setTempo,
   setTrackWaveform,
   toggleStep,
+  toggleTrackMute,
 } from '../../src/state/pattern';
 
 describe('createSequencerState', () => {
@@ -21,6 +22,7 @@ describe('createSequencerState', () => {
     for (const track of state.tracks) {
       expect(track.pattern).toHaveLength(STEPS_PER_PATTERN);
       expect(track.pattern.every((step) => step.note === null)).toBe(true);
+      expect(track.muted).toBe(false);
     }
   });
 });
@@ -72,6 +74,39 @@ describe('setTrackWaveform', () => {
   });
 });
 
+describe('toggleTrackMute', () => {
+  it('toggles the muted flag of the targeted track without mutating the input', () => {
+    const initial = createSequencerState();
+    expect(initial.tracks.every((track) => track.muted === false)).toBe(true);
+
+    const muted = toggleTrackMute(initial, 0);
+    expect(muted).not.toBe(initial);
+    expect(muted.tracks[0]).not.toBe(initial.tracks[0]);
+    expect(muted.tracks[0]!.muted).toBe(true);
+    expect(muted.tracks[1]!.muted).toBe(false);
+    expect(initial.tracks[0]!.muted).toBe(false);
+
+    const unmuted = toggleTrackMute(muted, 0);
+    expect(unmuted.tracks[0]!.muted).toBe(false);
+  });
+
+  it('preserves the rest of the track and the tempo when muting', () => {
+    const state = setTrackWaveform(toggleStep(createSequencerState(), 2, 4), 2, 'sine');
+    const muted = toggleTrackMute(state, 2);
+    expect(muted.tracks[2]!.waveform).toBe('sine');
+    expect(muted.tracks[2]!.pattern[4]!.note).toBe(76);
+    expect(muted.tracks[2]!.volume).toBe(state.tracks[2]!.volume);
+    expect(muted.tempoBpm).toBe(state.tempoBpm);
+  });
+
+  it('returns the same state for an out-of-range track index', () => {
+    const state = createSequencerState();
+    expect(toggleTrackMute(state, -1)).toBe(state);
+    expect(toggleTrackMute(state, TRACK_COUNT)).toBe(state);
+    expect(toggleTrackMute(state, 99)).toBe(state);
+  });
+});
+
 describe('setTempo', () => {
   it('sets, rounds and clamps the tempo', () => {
     const state = createSequencerState();
@@ -99,5 +134,15 @@ describe('cloneSequencerState', () => {
     expect(toggled.tracks[0]!.pattern[0]!.note).toBe(33);
     expect(toggled.tracks[1]!.waveform).toBe('sawtooth');
     expect(toggled.tempoBpm).toBe(DEFAULT_TEMPO_BPM);
+  });
+
+  it('preserves per-track muted flags through a deep clone', () => {
+    const muted = toggleTrackMute(createSequencerState(), 3);
+    const clone = cloneSequencerState(muted);
+    expect(clone.tracks[3]!.muted).toBe(true);
+    expect(clone.tracks[0]!.muted).toBe(false);
+
+    clone.tracks[3]!.muted = false;
+    expect(muted.tracks[3]!.muted).toBe(true);
   });
 });

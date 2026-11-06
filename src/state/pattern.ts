@@ -91,6 +91,18 @@ export function setTrackWaveform(
 }
 
 /**
+ * Toggles the muted flag of one track, returning a new state (the input is
+ * never mutated). An unknown track index returns the state unchanged.
+ */
+export function toggleTrackMute(state: SequencerState, trackIndex: number): SequencerState {
+  const track = state.tracks[trackIndex];
+  if (!track) return state;
+  const tracks = state.tracks.slice();
+  tracks[trackIndex] = { ...track, muted: !track.muted };
+  return { ...state, tracks };
+}
+
+/**
  * Sets the tempo in BPM, rounded to a whole number and clamped to
  * [{@link MIN_TEMPO_BPM}, {@link MAX_TEMPO_BPM}]. Non-finite input falls back
  * to {@link DEFAULT_TEMPO_BPM}.

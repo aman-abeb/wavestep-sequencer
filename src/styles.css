@@ -72,6 +72,33 @@ body {
   outline-offset: 2px;
 }
 
+.play-button {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--step-border);
+  border-radius: 8px;
+  padding: 0.5rem 1.1rem;
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.play-button:hover {
+  border-color: var(--accent);
+}
+
+.play-button.playing {
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  border-color: transparent;
+  color: #14101f;
+}
+
+.play-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .export-button {
   background: linear-gradient(90deg, var(--accent), #0ea5b7);
   color: #06222a;
@@ -101,6 +128,11 @@ body {
 .export-error {
   margin: 0;
   color: #f87171;
+}
+
+.shortcut-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 .step-grid {
@@ -157,8 +189,45 @@ body {
   gap: 0.35rem;
 }
 
+.track-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .track-name {
   font-weight: 600;
+}
+
+.mute-button {
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--step-border);
+  border-radius: 6px;
+  padding: 0.15rem 0.5rem;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.mute-button:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.mute-button.muted {
+  background: #f87171;
+  border-color: #f87171;
+  color: #2b0606;
+}
+
+.mute-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .waveform-select {

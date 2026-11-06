@@ -11,6 +11,7 @@ import {
   setTempo,
   setTrackWaveform,
   toggleStep,
+  toggleTrackMute,
   type SequencerState,
 } from '../../src/state/pattern';
 
@@ -29,6 +30,7 @@ function Harness() {
         setState((prev) => setTrackWaveform(prev, trackIndex, waveform))
       }
       onTempoChange={(tempoBpm) => setState((prev) => setTempo(prev, tempoBpm))}
+      onToggleMute={(trackIndex) => setState((prev) => toggleTrackMute(prev, trackIndex))}
     />
   );
 }
@@ -39,6 +41,7 @@ function renderStateless(overrides: Partial<Parameters<typeof StepGrid>[0]> = {}
     onToggleStep: vi.fn(),
     onWaveformChange: vi.fn(),
     onTempoChange: vi.fn(),
+    onToggleMute: vi.fn(),
     ...overrides,
   };
   render(<StepGrid {...props} />);
@@ -116,5 +119,55 @@ describe('StepGrid', () => {
     expect(screen.getByText(`${MAX_TEMPO_BPM} BPM`)).toBeTruthy();
     fireEvent.change(slider, { target: { value: '10' } });
     expect(screen.getByText(`${MIN_TEMPO_BPM} BPM`)).toBeTruthy();
+  });
+});
+
+describe('StepGrid — track mute buttons', () => {
+  it('renders one mute button per track with aria-pressed and aria-keyshortcuts', () => {
+    render(<Harness />);
+    const muteButtons = screen.getAllByRole('button', { name: /^Mute / });
+    expect(muteButtons).toHaveLength(4);
+    expect(muteButtons.map((button) => button.getAttribute('aria-pressed'))).toEqual([
+      'false',
+      'false',
+      'false',
+      'false',
+    ]);
+    expect(muteButtons.map((button) => button.getAttribute('aria-keyshortcuts'))).toEqual([
+      '1',
+      '2',
+      '3',
+      '4',
+    ]);
+  });
+
+  it('reports mute clicks with the track index', () => {
+    const { onToggleMute } = renderStateless();
+    fireEvent.click(screen.getByRole('button', { name: 'Mute Lead' }));
+    expect(onToggleMute).toHaveBeenCalledTimes(1);
+    expect(onToggleMute).toHaveBeenCalledWith(1);
+  });
+
+  it('reflects an externally muted track as pressed', () => {
+    const state = toggleTrackMute(createSequencerState(), 3);
+    renderStateless({ state });
+    expect(screen.getByRole('button', { name: 'Mute Drums' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Mute Bass' }).getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+  });
+
+  it('mutes and unmutes a track through the harness', () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Mute Arp' }));
+    expect(screen.getByRole('button', { name: 'Mute Arp' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Mute Arp' }));
+    expect(screen.getByRole('button', { name: 'Mute Arp' }).getAttribute('aria-pressed')).toBe(
+      'false',
+    );
   });
 });
